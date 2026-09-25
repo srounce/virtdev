@@ -1,3 +1,6 @@
+mod cache;
+mod config;
+mod daemon;
 mod hidraw;
 mod proxy;
 mod uhid;
@@ -25,6 +28,13 @@ enum Cmd {
         #[arg(long)]
         name: Option<String>,
     },
+    /// Run the proxy daemon for every device in the config file.
+    Daemon {
+        config: PathBuf,
+        /// Where cached device identities live. Defaults to $CACHE_DIRECTORY.
+        #[arg(long, env = "CACHE_DIRECTORY", default_value = "/var/cache/virtdev")]
+        cache_dir: PathBuf,
+    },
 }
 
 fn main() -> Result<()> {
@@ -32,6 +42,7 @@ fn main() -> Result<()> {
     match Cli::parse().cmd {
         Cmd::Inspect { path } => inspect(&path),
         Cmd::Mirror { path, name } => mirror(&path, name),
+        Cmd::Daemon { config, cache_dir } => daemon::run(config::load(&config)?, &cache_dir),
     }
 }
 
@@ -54,7 +65,7 @@ fn mirror(path: &std::path::Path, name: Option<String>) -> Result<()> {
     let info = dev.info()?;
     let ident = uhid::Identity {
         name: name.unwrap_or_else(|| info.name.clone()),
-        phys: "virtdev:mirror".into(),
+        phys: daemon::phys_for("mirror"),
         uniq: info.uniq.clone(),
         bus: info.bus,
         vendor: info.vendor as u32,

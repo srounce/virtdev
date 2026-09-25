@@ -302,7 +302,7 @@ rec {
           "usage" = [ "clap_builder/usage" ];
           "wrap_help" = [ "clap_builder/wrap_help" ];
         };
-        resolvedDefaultFeatures = [ "color" "default" "derive" "error-context" "help" "std" "suggestions" "usage" ];
+        resolvedDefaultFeatures = [ "color" "default" "derive" "env" "error-context" "help" "std" "suggestions" "usage" ];
       };
       "clap_builder" = rec {
         crateName = "clap_builder";
@@ -341,7 +341,7 @@ rec {
           "unstable-v5" = [ "deprecated" ];
           "wrap_help" = [ "help" "dep:terminal_size" ];
         };
-        resolvedDefaultFeatures = [ "color" "error-context" "help" "std" "suggestions" "usage" ];
+        resolvedDefaultFeatures = [ "color" "env" "error-context" "help" "std" "suggestions" "usage" ];
       };
       "clap_derive" = rec {
         crateName = "clap_derive";
@@ -1561,7 +1561,7 @@ rec {
           {
             name = "clap";
             packageId = "clap";
-            features = [ "derive" ];
+            features = [ "derive" "env" ];
           }
           {
             name = "env_logger";
