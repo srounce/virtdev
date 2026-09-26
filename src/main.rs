@@ -69,7 +69,7 @@ fn main() -> Result<()> {
             let cfg = config::load(&config)?;
             let o = rules::Options { user: &user, group: &group, setfacl: &setfacl };
             std::fs::create_dir_all(&out_dir).with_context(|| format!("create {}", out_dir.display()))?;
-            std::fs::write(out_dir.join("70-virtdev.rules"), rules::access(&o))?;
+            std::fs::write(out_dir.join("70-virtdev.rules"), rules::access(&cfg, &o))?;
             std::fs::write(out_dir.join("99-virtdev.rules"), rules::hide(&cfg, &o))?;
             Ok(())
         }

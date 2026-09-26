@@ -130,8 +130,9 @@ virtdev udev-rules config.toml OUTDIR [--user U --group G --setfacl PATH]
 Some rules are unavoidable: the daemon needs `/dev/uhid` and the source nodes,
 and the only way to hide a HID device from other programs without losing its
 hidraw is to take away their permission to open it. `virtdev udev-rules`
-writes two files. 70-virtdev.rules hands the daemon its devices and tags the
-proxy hidraw with uaccess. 99-virtdev.rules strips uaccess from the sources,
+writes two files. 70-virtdev.rules hands the daemon `/dev/uhid`, tags the proxy
+nodes with uaccess, and links them as `/dev/input/by-id/virtdev-<name>-hidraw`,
+`-event-joystick|kbd|mouse` and `-joystick`. 99-virtdev.rules strips uaccess from the sources,
 sets them 0600 owned by the daemon user, and clears any ACL the uaccess
 builtin already applied. The daemon repeats the chmod and ACL removal on every
 attach as a fallback. Because the proxy shares its source's VID/PID, only the

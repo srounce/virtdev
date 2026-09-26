@@ -33,6 +33,9 @@ pkgs.runCommand "virtdev-nixos-module" { } ''
   cp ${cfg.services.virtdev.configFile} $out/virtdev.toml
   cp ${cfg.services.virtdev.udevRules}/lib/udev/rules.d/*.rules $out/
   grep -q 'ENV{HID_PHYS}=="virtdev:\*", TAG+="uaccess"' $out/70-virtdev.rules
+  grep -q 'ATTRS{phys}=="virtdev:\*", TAG+="uaccess"' $out/70-virtdev.rules
+  grep -q 'SYMLINK+="input/by-id/virtdev-gt3wls-hidraw"' $out/70-virtdev.rules
+  grep -q 'ATTRS{phys}=="virtdev:gt3wls", ENV{ID_INPUT_JOYSTICK}=="1", SYMLINK+="input/by-id/virtdev-gt3wls-event-joystick"' $out/70-virtdev.rules
   grep -q 'KERNELS=="0005:5411:6969.\*"' $out/99-virtdev.rules
   grep -q 'KERNELS=="\*:054C:09CC.\*"' $out/99-virtdev.rules
   grep -q 'setfacl -b \$devnode' $out/99-virtdev.rules

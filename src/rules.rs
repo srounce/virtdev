@@ -12,15 +12,37 @@ pub struct Options<'a> {
     pub setfacl: &'a str,
 }
 
-/// Grants the daemon /dev/uhid and gives the logged-in user the proxy hidraw.
-pub fn access(o: &Options) -> String {
-    format!(
-        "SUBSYSTEM==\"misc\", KERNEL==\"uhid\", OWNER=\"{u}\", GROUP=\"{g}\", MODE=\"0600\"\n\
+/// Grants the daemon /dev/uhid, gives the logged-in user the proxy nodes, and
+/// names them under /dev/input/by-id. The standard by-id rules skip uhid
+/// devices because they have no USB parent to derive a serial from.
+pub fn access(cfg: &Config, o: &Options) -> String {
+    let mut out = format!(
+        "SUBSYSTEM==\"misc\", KERNEL==\"uhid\", OWNER=\"{}\", GROUP=\"{}\", MODE=\"0600\"\n\
          SUBSYSTEM==\"hidraw\", IMPORT{{parent}}=\"HID_PHYS\"\n\
-         SUBSYSTEM==\"hidraw\", ENV{{HID_PHYS}}==\"virtdev:*\", TAG+=\"uaccess\"\n",
-        u = o.user,
-        g = o.group
-    )
+         SUBSYSTEM==\"hidraw\", ENV{{HID_PHYS}}==\"virtdev:*\", TAG+=\"uaccess\"\n\
+         SUBSYSTEM==\"input\", ATTRS{{phys}}==\"virtdev:*\", TAG+=\"uaccess\"\n",
+        o.user, o.group
+    );
+    for name in cfg.devices.keys() {
+        let _ = writeln!(out, "# virtdev: by-id links for \"{name}\"");
+        let _ = writeln!(
+            out,
+            "SUBSYSTEM==\"hidraw\", ENV{{HID_PHYS}}==\"virtdev:{name}\", SYMLINK+=\"input/by-id/virtdev-{name}-hidraw\""
+        );
+        let ev = format!("SUBSYSTEM==\"input\", KERNEL==\"event*\", ATTRS{{phys}}==\"virtdev:{name}\"");
+        for (prop, suffix) in [("ID_INPUT_JOYSTICK", "joystick"), ("ID_INPUT_KEYBOARD", "kbd"), ("ID_INPUT_MOUSE", "mouse")] {
+            let _ = writeln!(out, "{ev}, ENV{{{prop}}}==\"1\", SYMLINK+=\"input/by-id/virtdev-{name}-event-{suffix}\"");
+        }
+        let _ = writeln!(
+            out,
+            "{ev}, ENV{{ID_INPUT_JOYSTICK}}!=\"1\", ENV{{ID_INPUT_KEYBOARD}}!=\"1\", ENV{{ID_INPUT_MOUSE}}!=\"1\", SYMLINK+=\"input/by-id/virtdev-{name}-event\""
+        );
+        let _ = writeln!(
+            out,
+            "SUBSYSTEM==\"input\", KERNEL==\"js*\", ATTRS{{phys}}==\"virtdev:{name}\", SYMLINK+=\"input/by-id/virtdev-{name}-joystick\""
+        );
+    }
+    out
 }
 
 /// Makes each source device unreachable for anything but the daemon. The proxy
