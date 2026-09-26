@@ -109,15 +109,17 @@ phys = "input1"       # optional: substring of the source phys, selects an inter
 
 An identity can also be given inline as a `[devices.<name>.identity]` table.
 With an identity the virtual device exists from daemon start and the match
-keys default to the identity's values. Without one, the identity is learned
-on first connect and cached under the cache directory for later boots.
+keys default to the identity's values. Without one, the virtual device is created
+from the first matching source that connects and lasts until the daemon
+exits, so it is absent between boot and first connect. The daemon keeps no
+state on disk.
 
 Commands:
 
 ```
 virtdev inspect [-f text|toml|nix|json] /dev/hidrawN
 virtdev mirror /dev/hidrawN               # one-off clone, for testing
-virtdev daemon config.toml [--cache-dir DIR]
+virtdev daemon config.toml
 virtdev udev-rules config.toml OUTDIR [--user U --group G --setfacl PATH]
 ```
 

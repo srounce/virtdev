@@ -19,7 +19,6 @@ use crate::uhid::{Event, Uhid};
 pub enum Ctrl {
     Attach(Hidraw),
     Detach,
-    Shutdown,
 }
 
 pub struct Handle {
@@ -79,7 +78,6 @@ impl Proxy {
                             self.source = Some(Arc::new(h));
                         }
                         Ctrl::Detach => self.detach(),
-                        Ctrl::Shutdown => return Ok(()),
                     }
                 }
             }

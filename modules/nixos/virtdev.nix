@@ -143,7 +143,6 @@ in
         ExecStart = "${cfg.package}/bin/virtdev daemon ${cfg.configFile}";
         User = cfg.user;
         Group = cfg.group;
-        CacheDirectory = "virtdev";
         Restart = "on-failure";
         RestartSec = 2;
 

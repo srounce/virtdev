@@ -6,7 +6,6 @@ After=systemd-udevd.service
 ExecStart=/usr/local/bin/virtdev daemon /etc/virtdev/config.toml
 User=virtdev
 Group=virtdev
-CacheDirectory=virtdev
 Restart=on-failure
 RestartSec=2
 Environment=RUST_LOG=info

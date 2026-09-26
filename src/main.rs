@@ -1,4 +1,3 @@
-mod cache;
 mod config;
 mod daemon;
 mod hidraw;
@@ -44,12 +43,7 @@ enum Cmd {
         name: Option<String>,
     },
     /// Run the proxy daemon for every device in the config file.
-    Daemon {
-        config: PathBuf,
-        /// Where cached device identities live. Defaults to $CACHE_DIRECTORY.
-        #[arg(long, env = "CACHE_DIRECTORY", default_value = "/var/cache/virtdev")]
-        cache_dir: PathBuf,
-    },
+    Daemon { config: PathBuf },
     /// Write 70-virtdev.rules and 99-virtdev.rules for the config into a directory.
     UdevRules {
         config: PathBuf,
@@ -70,7 +64,7 @@ fn main() -> Result<()> {
     match Cli::parse().cmd {
         Cmd::Inspect { path, format } => inspect(&path, format),
         Cmd::Mirror { path, name } => mirror(&path, name),
-        Cmd::Daemon { config, cache_dir } => daemon::run(config::load(&config)?, &cache_dir),
+        Cmd::Daemon { config } => daemon::run(config::load(&config)?),
         Cmd::UdevRules { config, out_dir, user, group, setfacl } => {
             let cfg = config::load(&config)?;
             let o = rules::Options { user: &user, group: &group, setfacl: &setfacl };

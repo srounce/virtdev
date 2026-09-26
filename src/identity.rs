@@ -1,5 +1,5 @@
-//! Serialisable form of a device identity, shared by the cache and by
-//! identities embedded in the config.
+//! Serialisable form of a device identity, as embedded in the config and
+//! printed by `inspect`.
 
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
