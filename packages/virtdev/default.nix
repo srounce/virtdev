@@ -9,5 +9,6 @@ let
 in
 cargoNix.rootCrate.build // {
   meta.license = pkgs.lib.licenses.gpl2Only;
+  meta.mainProgram = "virtdev";
   meta.description = "Persistent HID device proxy over uhid";
 }
