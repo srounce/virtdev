@@ -43,6 +43,10 @@ programs never see two controllers.
    setup in the same rebuild. Afterwards the virtual device exists from boot
    and the real one attaches whenever it connects.
 
+   If the service fails with permission denied on `/dev/uhid` right after
+   the first rebuild, the node predates the rule. Reboot, or run
+   `sudo udevadm trigger --action=add /dev/uhid`.
+
 ## Quickstart: other distros
 
 1. Build. Needs Rust, pkg-config and libudev headers (`libudev-dev` on
