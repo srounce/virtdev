@@ -28,7 +28,7 @@ pub struct DeviceConfig {
     /// Identity to create the virtual device from before the source has ever
     /// been seen. Takes precedence over the cache.
     pub identity: Option<StoredIdentity>,
-    /// Same as `identity`, read from a TOML file as written by `inspect --toml`.
+    /// Same as `identity`, read from a TOML file as written by `inspect --format toml`.
     pub identity_file: Option<PathBuf>,
 }
 

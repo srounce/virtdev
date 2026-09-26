@@ -13,7 +13,7 @@ it exists before the controller is powered on.
 
 ```
 virtdev inspect /dev/hidrawN            # identity and report descriptor
-virtdev inspect --toml /dev/hidrawN     # identity file for the config
+virtdev inspect --format toml /dev/hidrawN   # also nix, json
 virtdev mirror  /dev/hidrawN            # one-off clone, useful for testing
 virtdev daemon  config.toml             # run configured devices
 virtdev udev-rules config.toml OUTDIR   # write 70- and 99-virtdev.rules

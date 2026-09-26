@@ -60,3 +60,21 @@ fn unhex(s: &str) -> Result<Vec<u8>> {
         .map(|i| u8::from_str_radix(&s[i..i + 2], 16).map_err(Into::into))
         .collect()
 }
+
+impl StoredIdentity {
+    /// Nix attribute set literal, for pasting into a NixOS `identity` option.
+    pub fn to_nix(&self) -> String {
+        let s = |v: &str| format!("\"{}\"", v.replace('\\', "\\\\").replace('"', "\\\"").replace("${", "\\${"));
+        format!(
+            "{{\n  name = {};\n  uniq = {};\n  bus = {};\n  vendor = {};\n  product = {};\n  version = {};\n  country = {};\n  descriptor = {};\n}}\n",
+            s(&self.name),
+            s(&self.uniq),
+            self.bus,
+            self.vendor,
+            self.product,
+            self.version,
+            self.country,
+            s(&self.descriptor)
+        )
+    }
+}

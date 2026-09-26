@@ -51,12 +51,12 @@ let
       identity = lib.mkOption {
         type = lib.types.nullOr (lib.types.attrsOf (lib.types.either lib.types.str lib.types.int));
         default = null;
-        description = "Inline device identity as printed by `virtdev inspect --toml`, so the virtual device exists before the source has ever connected.";
+        description = "Inline device identity as printed by `virtdev inspect --format nix`, so the virtual device exists before the source has ever connected.";
       };
       identityFile = lib.mkOption {
         type = lib.types.nullOr lib.types.path;
         default = null;
-        description = "Path to a TOML identity file as written by `virtdev inspect --toml`.";
+        description = "Path to a TOML identity file as written by `virtdev inspect --format toml`.";
       };
     };
   };

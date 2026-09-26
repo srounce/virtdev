@@ -10,7 +10,7 @@ mod uhid;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 
 #[derive(Parser)]
 #[command(version, about)]
@@ -19,14 +19,22 @@ struct Cli {
     cmd: Cmd,
 }
 
+#[derive(Clone, Copy, PartialEq, Eq, ValueEnum)]
+enum Format {
+    Text,
+    Toml,
+    Nix,
+    Json,
+}
+
 #[derive(Subcommand)]
 enum Cmd {
     /// Print identity and report descriptor of a hidraw device.
     Inspect {
         path: PathBuf,
-        /// Emit TOML usable as a config `identity` or `identity_file`.
-        #[arg(long)]
-        toml: bool,
+        /// Structured formats emit the identity as used by the config and NixOS module.
+        #[arg(long, value_enum, default_value_t = Format::Text)]
+        format: Format,
     },
     /// Create a uhid clone of a hidraw device and proxy reports until interrupted.
     Mirror {
@@ -60,7 +68,7 @@ enum Cmd {
 fn main() -> Result<()> {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
     match Cli::parse().cmd {
-        Cmd::Inspect { path, toml } => inspect(&path, toml),
+        Cmd::Inspect { path, format } => inspect(&path, format),
         Cmd::Mirror { path, name } => mirror(&path, name),
         Cmd::Daemon { config, cache_dir } => daemon::run(config::load(&config)?, &cache_dir),
         Cmd::UdevRules { config, out_dir, user, group, setfacl } => {
@@ -92,12 +100,24 @@ fn identity_of(path: &Path, phys: &str) -> Result<(hidraw::Hidraw, uhid::Identit
     Ok((dev, ident))
 }
 
-fn inspect(path: &Path, as_toml: bool) -> Result<()> {
+fn inspect(path: &Path, format: Format) -> Result<()> {
     let (dev, mut id) = identity_of(path, "")?;
     id.phys = dev.info()?.phys;
-    if as_toml {
-        print!("{}", toml::to_string(&identity::StoredIdentity::from_identity(&id))?);
-        return Ok(());
+    let stored = identity::StoredIdentity::from_identity(&id);
+    match format {
+        Format::Toml => {
+            print!("{}", toml::to_string(&stored)?);
+            return Ok(());
+        }
+        Format::Json => {
+            println!("{}", serde_json::to_string_pretty(&stored)?);
+            return Ok(());
+        }
+        Format::Nix => {
+            print!("{}", stored.to_nix());
+            return Ok(());
+        }
+        Format::Text => {}
     }
     println!("name:    {}", id.name);
     println!("phys:    {}", id.phys);
