@@ -14,7 +14,7 @@ programs never see two controllers.
 1. Add the flake input and module:
 
    ```nix
-   inputs.virtdev.url = "github:<you>/virtdev";
+   inputs.virtdev.url = "github:srounce/virtdev";
    # in your NixOS configuration
    imports = [ inputs.virtdev.nixosModules.virtdev ];
    ```
@@ -22,7 +22,7 @@ programs never see two controllers.
 2. Capture the device identity once, with the device connected:
 
    ```
-   sudo nix run github:<you>/virtdev -- inspect -f nix /dev/hidrawN > gt3wls.nix
+   sudo nix run github:srounce/virtdev -- inspect -f nix /dev/hidrawN > gt3wls.nix
    ```
 
    Find `N` with `ls -l /dev/input/by-id/*hidraw` for USB, or for Bluetooth
