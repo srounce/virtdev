@@ -80,7 +80,9 @@ in
       example = lib.literalExpression ''
         {
           gt3wls.identity = import ./gt3wls.nix;   # from `virtdev inspect -f nix`
-          ds4 = { vendor = "054c"; product = "09cc"; };
+          # Without an identity the daemon learns it on first connect. Pin the
+          # bus for devices whose USB and Bluetooth descriptors differ.
+          ds4 = { vendor = "054c"; product = "09cc"; bus = "usb"; };
         }
       '';
     };
