@@ -1,0 +1,36 @@
+[Unit]
+Description=Persistent HID device proxy
+After=systemd-udevd.service
+
+[Service]
+ExecStart=/usr/local/bin/virtdev daemon /etc/virtdev/config.toml
+User=virtdev
+Group=virtdev
+CacheDirectory=virtdev
+Restart=on-failure
+RestartSec=2
+Environment=RUST_LOG=info
+
+DevicePolicy=closed
+DeviceAllow=/dev/uhid rw
+DeviceAllow=char-hidraw rw
+DeviceAllow=char-input rw
+RestrictAddressFamilies=AF_NETLINK AF_UNIX
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictRealtime=true
+RestrictNamespaces=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged
+CapabilityBoundingSet=
+
+[Install]
+WantedBy=multi-user.target
