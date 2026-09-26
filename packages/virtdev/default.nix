@@ -13,6 +13,8 @@ cargoNix.rootCrate.build.overrideAttrs (old: {
   pname = cargoToml.package.name;
   inherit (cargoToml.package) version;
   name = "${cargoToml.package.name}-${cargoToml.package.version}";
+  # The version comes from Cargo.toml along with the source, not from a bump.
+  __intentionallyOverridingVersion = true;
   meta = (old.meta or { }) // {
     description = cargoToml.package.description;
     license = pkgs.lib.licenses.gpl2Only;
