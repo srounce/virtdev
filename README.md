@@ -22,7 +22,7 @@ programs never see two controllers.
 2. Capture the device identity once, with the device connected:
 
    ```
-   sudo nix run github:srounce/virtdev -- inspect -f nix /dev/hidrawN > gt3wls.nix
+   sudo nix run github:srounce/virtdev -- inspect -f nix /dev/hidrawN > gamepad.nix
    ```
 
    Find `N` with `ls -l /dev/input/by-id/*hidraw` for USB, or for Bluetooth
@@ -33,7 +33,7 @@ programs never see two controllers.
    ```nix
    services.virtdev = {
      enable = true;
-     devices.gt3wls.identity = import ./gt3wls.nix;
+     devices.gamepad.identity = import ./gamepad.nix;
    };
    ```
 
@@ -64,14 +64,14 @@ programs never see two controllers.
 
    ```
    sudo mkdir -p /etc/virtdev
-   sudo virtdev inspect -f toml /dev/hidrawN | sudo tee /etc/virtdev/gt3wls.toml
+   sudo virtdev inspect -f toml /dev/hidrawN | sudo tee /etc/virtdev/gamepad.toml
    ```
 
    `/etc/virtdev/config.toml`:
 
    ```toml
-   [devices.gt3wls]
-   identity_file = "/etc/virtdev/gt3wls.toml"
+   [devices.gamepad]
+   identity_file = "/etc/virtdev/gamepad.toml"
    ```
 
 4. Generate and install the udev rules, then re-run them for anything
@@ -96,8 +96,8 @@ programs never see two controllers.
 ## Config reference
 
 ```toml
-[devices.gt3wls]
-identity_file = "/etc/virtdev/gt3wls.toml"   # from `inspect -f toml`
+[devices.gamepad]
+identity_file = "/etc/virtdev/gamepad.toml"   # from `inspect -f toml`
 
 [devices.ds4]
 vendor = 0x054c       # required without an identity

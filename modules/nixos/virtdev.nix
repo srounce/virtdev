@@ -79,7 +79,7 @@ in
       description = "Virtual devices to keep alive, keyed by a short name.";
       example = lib.literalExpression ''
         {
-          gt3wls.identity = import ./gt3wls.nix;   # from `virtdev inspect -f nix`
+          gamepad.identity = import ./gamepad.nix;   # from `virtdev inspect -f nix`
           # Without an identity the daemon learns it on first connect. Pin the
           # bus for devices whose USB and Bluetooth descriptors differ.
           ds4 = { vendor = "054c"; product = "09cc"; bus = "usb"; };
