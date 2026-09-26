@@ -23,17 +23,20 @@ Config:
 
 ```toml
 [devices.gt3wls]
-vendor = 0x5411
-product = 0x6969
-bus = "bluetooth"     # optional: usb, bluetooth, i2c, or a number
+identity_file = "/etc/virtdev/gt3wls.toml"   # from `inspect --format toml`
+
+[devices.ds4]
+vendor = 0x054c
+product = 0x09cc
+bus = "usb"           # optional: usb, bluetooth, i2c, or a number
 uniq = "aa:bb:..."    # optional: serial or Bluetooth address
 phys = "input1"       # optional: substring of the source phys, selects an interface
-identity_file = "/etc/virtdev/gt3wls.toml"   # optional: from `inspect --format toml`
 ```
 
 With `identity_file` (or an inline `[devices.<name>.identity]` table) the
-virtual device exists from daemon start. Without it, the identity is learned
-on first connect and cached under the cache directory for later boots.
+virtual device exists from daemon start, and vendor, product and bus default
+to the identity's. Without an identity those keys are required, and the
+identity is learned on first connect and cached for later boots.
 
 ## udev rules
 
@@ -54,10 +57,7 @@ phys string (`virtdev:<name>`) tells them apart.
   imports = [ virtdev.nixosModules.virtdev ];
   services.virtdev = {
     enable = true;
-    devices.gt3wls = {
-      vendor = "5411"; product = "6969"; bus = "bluetooth";
-      identityFile = ./gt3wls.toml;
-    };
+    devices.gt3wls.identity = import ./gt3wls.nix;   # virtdev inspect -f nix
   };
 }
 ```

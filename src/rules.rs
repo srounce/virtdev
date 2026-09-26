@@ -35,7 +35,7 @@ pub fn hide(cfg: &Config, o: &Options) -> String {
     );
     for (name, d) in &cfg.devices {
         let bus = d.bus.map_or("*".to_string(), |b| format!("{b:04X}"));
-        let kernels = format!("{bus}:{:04X}:{:04X}.*", d.vendor, d.product);
+        let kernels = format!("{bus}:{:04X}:{:04X}.*", d.vendor.unwrap_or(0), d.product.unwrap_or(0));
         let _ = writeln!(out, "# virtdev: hide source of \"{name}\"");
         let _ = writeln!(out, "SUBSYSTEM==\"hidraw\", KERNELS==\"{kernels}\", IMPORT{{parent}}=\"HID_PHYS\"");
         let _ = writeln!(out, "SUBSYSTEM==\"hidraw\", KERNELS==\"{kernels}\", ENV{{HID_PHYS}}!=\"virtdev:*\", {restrict}");

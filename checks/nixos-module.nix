@@ -20,7 +20,7 @@ let
         system.stateVersion = "25.11";
         services.virtdev = {
           enable = true;
-          devices.gt3wls = { vendor = "5411"; product = "6969"; bus = "bluetooth"; identityFile = identity; };
+          devices.gt3wls.identityFile = identity;
           devices.ds4 = { vendor = 1356; product = "09cc"; };
         };
       }
@@ -37,7 +37,7 @@ pkgs.runCommand "virtdev-nixos-module" { } ''
   grep -q 'KERNELS=="\*:054C:09CC.\*"' $out/99-virtdev.rules
   grep -q 'setfacl -b \$devnode' $out/99-virtdev.rules
   grep -q '^\[devices.gt3wls\]' $out/virtdev.toml
-  grep -q 'bus = "bluetooth"' $out/virtdev.toml
+  ! grep -q 'vendor' $out/virtdev.toml || grep -q 'vendor = 1356' $out/virtdev.toml
   grep -q 'identity_file = "${identity}"' $out/virtdev.toml
   ! grep -q 'uniq' $out/virtdev.toml
 ''

@@ -11,8 +11,8 @@ let
     devices = lib.mapAttrs (_: d:
       lib.filterAttrs (_: v: v != null) {
         inherit (d) bus uniq phys identity;
-        vendor = toId d.vendor;
-        product = toId d.product;
+        vendor = lib.mapNullable toId d.vendor;
+        product = lib.mapNullable toId d.product;
         identity_file = d.identityFile;
       }) cfg.devices;
   };
@@ -26,17 +26,19 @@ let
   deviceModule = { ... }: {
     options = {
       vendor = lib.mkOption {
-        type = idType;
-        description = "Vendor ID of the source device, as an integer or hex string.";
+        type = lib.types.nullOr idType;
+        default = null;
+        description = "Vendor ID of the source device, as an integer or hex string. Defaults to the identity's.";
       };
       product = lib.mkOption {
-        type = idType;
-        description = "Product ID of the source device, as an integer or hex string.";
+        type = lib.types.nullOr idType;
+        default = null;
+        description = "Product ID of the source device, as an integer or hex string. Defaults to the identity's.";
       };
       bus = lib.mkOption {
         type = lib.types.nullOr (lib.types.either (lib.types.enum [ "usb" "bluetooth" "virtual" "i2c" ]) lib.types.ints.u16);
         default = null;
-        description = "Restrict to a HID bus type. Null matches any.";
+        description = "Restrict to a HID bus type. Defaults to the identity's, otherwise any.";
       };
       uniq = lib.mkOption {
         type = lib.types.nullOr lib.types.str;
@@ -77,10 +79,8 @@ in
       description = "Virtual devices to keep alive, keyed by a short name.";
       example = lib.literalExpression ''
         {
-          gt3wls = {
-            vendor = "5411"; product = "6969"; bus = "bluetooth";
-            identityFile = ./gt3wls.toml;
-          };
+          gt3wls.identity = import ./gt3wls.nix;   # from `virtdev inspect -f nix`
+          ds4 = { vendor = "054c"; product = "09cc"; };
         }
       '';
     };

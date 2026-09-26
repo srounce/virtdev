@@ -18,8 +18,9 @@ pub struct Config {
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct DeviceConfig {
-    pub vendor: u16,
-    pub product: u16,
+    /// Match keys. Default to the identity's values when one is configured.
+    pub vendor: Option<u16>,
+    pub product: Option<u16>,
     #[serde(default, deserialize_with = "de_bus")]
     pub bus: Option<u16>,
     pub uniq: Option<String>,
@@ -34,8 +35,8 @@ pub struct DeviceConfig {
 
 impl DeviceConfig {
     pub fn matches(&self, bus: u16, vendor: u16, product: u16, uniq: &str, phys: &str) -> bool {
-        self.vendor == vendor
-            && self.product == product
+        self.vendor == Some(vendor)
+            && self.product == Some(product)
             && self.bus.is_none_or(|b| b == bus)
             && self.uniq.as_deref().is_none_or(|u| u.eq_ignore_ascii_case(uniq))
             && self.phys.as_deref().is_none_or(|p| phys.contains(p))
@@ -53,7 +54,19 @@ impl DeviceConfig {
 
 pub fn load(path: &Path) -> Result<Config> {
     let text = std::fs::read_to_string(path).with_context(|| format!("read {}", path.display()))?;
-    toml::from_str(&text).with_context(|| format!("parse {}", path.display()))
+    let mut cfg: Config = toml::from_str(&text).with_context(|| format!("parse {}", path.display()))?;
+    for (name, d) in cfg.devices.iter_mut() {
+        if let Some(id) = d.configured_identity().with_context(|| format!("device {name}"))? {
+            d.vendor.get_or_insert(id.vendor as u16);
+            d.product.get_or_insert(id.product as u16);
+            d.bus.get_or_insert(id.bus);
+        }
+        anyhow::ensure!(
+            d.vendor.is_some() && d.product.is_some(),
+            "device {name}: vendor and product are required without an identity"
+        );
+    }
+    Ok(cfg)
 }
 
 #[derive(Deserialize)]
