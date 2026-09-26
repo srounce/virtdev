@@ -125,6 +125,7 @@ in
 
   config = lib.mkIf cfg.enable {
     boot.kernelModules = [ "uhid" ];
+    environment.systemPackages = [ cfg.package ];
 
     users.users.${cfg.user} = {
       isSystemUser = true;

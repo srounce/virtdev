@@ -19,16 +19,18 @@ programs never see two controllers.
    imports = [ inputs.virtdev.nixosModules.virtdev ];
    ```
 
-2. Capture the device identity once, with the device connected:
+2. Enable the service with no devices yet and rebuild, so the `virtdev`
+   command is installed. Then capture the device identity once, with the
+   device connected:
 
    ```
-   sudo nix run github:srounce/virtdev -- inspect -f nix /dev/hidrawN > gamepad.nix
+   sudo virtdev inspect -f nix /dev/hidrawN > gamepad.nix
    ```
 
    Find `N` with `ls -l /dev/input/by-id/*hidraw` for USB, or for Bluetooth
    `grep -l 'HID_ID=0005' /sys/class/hidraw/hidraw*/device/uevent`.
 
-3. Enable the service, one entry per device:
+3. Add one entry per device and rebuild again:
 
    ```nix
    services.virtdev = {
