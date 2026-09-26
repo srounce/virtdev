@@ -7,4 +7,7 @@ let
     };
   };
 in
-cargoNix.rootCrate.build
+cargoNix.rootCrate.build // {
+  meta.license = pkgs.lib.licenses.gpl2Only;
+  meta.description = "Persistent HID device proxy over uhid";
+}

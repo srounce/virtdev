@@ -143,3 +143,7 @@ cargo build
 crate2nix generate     # after changing Cargo.toml
 nix flake check
 ```
+
+## License
+
+GPL-2.0-only. See LICENSE.

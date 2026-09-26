@@ -2,7 +2,7 @@
 name = "virtdev"
 version = "0.1.0"
 edition = "2021"
-license = "MIT"
+license = "GPL-2.0-only"
 description = "Persistent HID device proxy over uhid"
 
 [dependencies]
