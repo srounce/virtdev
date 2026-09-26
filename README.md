@@ -39,9 +39,9 @@ programs never see two controllers.
    };
    ```
 
-4. Remove any custom udev rules for the device and any persistent-evdev
-   setup, then rebuild. The virtual device exists from boot and the real one
-   attaches whenever it connects.
+   Remove any custom udev rules for the device and any persistent-evdev
+   setup in the same rebuild. Afterwards the virtual device exists from boot
+   and the real one attaches whenever it connects.
 
 ## Quickstart: other distros
 
