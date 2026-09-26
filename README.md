@@ -28,7 +28,7 @@ product = 0x6969
 bus = "bluetooth"     # optional: usb, bluetooth, i2c, or a number
 uniq = "aa:bb:..."    # optional: serial or Bluetooth address
 phys = "input1"       # optional: substring of the source phys, selects an interface
-identity_file = "/etc/virtdev/gt3wls.toml"   # optional: from `inspect --toml`
+identity_file = "/etc/virtdev/gt3wls.toml"   # optional: from `inspect --format toml`
 ```
 
 With `identity_file` (or an inline `[devices.<name>.identity]` table) the
