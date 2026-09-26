@@ -33,7 +33,7 @@ enum Cmd {
     Inspect {
         path: PathBuf,
         /// Structured formats emit the identity as used by the config and NixOS module.
-        #[arg(long, value_enum, default_value_t = Format::Text)]
+        #[arg(short, long, value_enum, default_value_t = Format::Text)]
         format: Format,
     },
     /// Create a uhid clone of a hidraw device and proxy reports until interrupted.
