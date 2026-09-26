@@ -1,5 +1,6 @@
 { pkgs, ... }:
 let
+  cargoToml = builtins.fromTOML (builtins.readFile ../../Cargo.toml);
   cargoNix = pkgs.callPackage ../../Cargo.nix {
     buildRustCrateForPkgs = p: p.buildRustCrate.override {
       rustc = p.rustToolchain;
@@ -7,8 +8,14 @@ let
     };
   };
 in
-cargoNix.rootCrate.build // {
-  meta.license = pkgs.lib.licenses.gpl2Only;
-  meta.mainProgram = "virtdev";
-  meta.description = "Persistent HID device proxy over uhid";
-}
+# buildRustCrate names every crate rust_<name>; give the binary its own name.
+cargoNix.rootCrate.build.overrideAttrs (old: {
+  pname = cargoToml.package.name;
+  inherit (cargoToml.package) version;
+  name = "${cargoToml.package.name}-${cargoToml.package.version}";
+  meta = (old.meta or { }) // {
+    description = cargoToml.package.description;
+    license = pkgs.lib.licenses.gpl2Only;
+    mainProgram = "virtdev";
+  };
+})
