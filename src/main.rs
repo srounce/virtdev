@@ -2,12 +2,14 @@ mod cache;
 mod config;
 mod daemon;
 mod hidraw;
+mod identity;
 mod proxy;
+mod rules;
 mod uhid;
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
@@ -20,7 +22,12 @@ struct Cli {
 #[derive(Subcommand)]
 enum Cmd {
     /// Print identity and report descriptor of a hidraw device.
-    Inspect { path: PathBuf },
+    Inspect {
+        path: PathBuf,
+        /// Emit TOML usable as a config `identity` or `identity_file`.
+        #[arg(long)]
+        toml: bool,
+    },
     /// Create a uhid clone of a hidraw device and proxy reports until interrupted.
     Mirror {
         path: PathBuf,
@@ -35,46 +42,80 @@ enum Cmd {
         #[arg(long, env = "CACHE_DIRECTORY", default_value = "/var/cache/virtdev")]
         cache_dir: PathBuf,
     },
+    /// Write 70-virtdev.rules and 99-virtdev.rules for the config into a directory.
+    UdevRules {
+        config: PathBuf,
+        out_dir: PathBuf,
+        /// User the daemon runs as.
+        #[arg(long, default_value = "virtdev")]
+        user: String,
+        #[arg(long, default_value = "virtdev")]
+        group: String,
+        /// Absolute path of setfacl, used to strip ACLs from source nodes.
+        #[arg(long, default_value = "/usr/bin/setfacl")]
+        setfacl: String,
+    },
 }
 
 fn main() -> Result<()> {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
     match Cli::parse().cmd {
-        Cmd::Inspect { path } => inspect(&path),
+        Cmd::Inspect { path, toml } => inspect(&path, toml),
         Cmd::Mirror { path, name } => mirror(&path, name),
         Cmd::Daemon { config, cache_dir } => daemon::run(config::load(&config)?, &cache_dir),
+        Cmd::UdevRules { config, out_dir, user, group, setfacl } => {
+            let cfg = config::load(&config)?;
+            let o = rules::Options { user: &user, group: &group, setfacl: &setfacl };
+            std::fs::create_dir_all(&out_dir).with_context(|| format!("create {}", out_dir.display()))?;
+            std::fs::write(out_dir.join("70-virtdev.rules"), rules::access(&o))?;
+            std::fs::write(out_dir.join("99-virtdev.rules"), rules::hide(&cfg, &o))?;
+            Ok(())
+        }
     }
 }
 
-fn inspect(path: &std::path::Path) -> Result<()> {
+fn identity_of(path: &Path, phys: &str) -> Result<(hidraw::Hidraw, uhid::Identity)> {
     let dev = hidraw::Hidraw::open(path)?;
     let info = dev.info()?;
-    println!("name:    {}", info.name);
-    println!("phys:    {}", info.phys);
-    println!("uniq:    {}", info.uniq);
-    println!("id:      {:04x}:{:04x}:{:04x}", info.bus, info.vendor, info.product);
-    println!("rdesc:   {} bytes", info.descriptor.len());
-    for chunk in info.descriptor.chunks(16) {
+    let version = daemon::source_info_for(path).map(|s| s.version).unwrap_or(0);
+    let ident = uhid::Identity {
+        name: info.name,
+        phys: phys.to_string(),
+        uniq: info.uniq,
+        bus: info.bus,
+        vendor: info.vendor as u32,
+        product: info.product as u32,
+        version,
+        country: 0,
+        descriptor: info.descriptor,
+    };
+    Ok((dev, ident))
+}
+
+fn inspect(path: &Path, as_toml: bool) -> Result<()> {
+    let (dev, mut id) = identity_of(path, "")?;
+    id.phys = dev.info()?.phys;
+    if as_toml {
+        print!("{}", toml::to_string(&identity::StoredIdentity::from_identity(&id))?);
+        return Ok(());
+    }
+    println!("name:    {}", id.name);
+    println!("phys:    {}", id.phys);
+    println!("uniq:    {}", id.uniq);
+    println!("id:      {:04x}:{:04x}:{:04x} version {:04x}", id.bus, id.vendor, id.product, id.version);
+    println!("rdesc:   {} bytes", id.descriptor.len());
+    for chunk in id.descriptor.chunks(16) {
         println!("  {}", proxy::hex(chunk));
     }
     Ok(())
 }
 
-fn mirror(path: &std::path::Path, name: Option<String>) -> Result<()> {
-    let dev = hidraw::Hidraw::open(path)?;
-    let info = dev.info()?;
-    let ident = uhid::Identity {
-        name: name.unwrap_or_else(|| info.name.clone()),
-        phys: daemon::phys_for("mirror"),
-        uniq: info.uniq.clone(),
-        bus: info.bus,
-        vendor: info.vendor as u32,
-        product: info.product as u32,
-        version: 0,
-        country: 0,
-        descriptor: info.descriptor.clone(),
-    };
-    log::info!("creating uhid clone of {} ({:04x}:{:04x}:{:04x})", info.name, info.bus, info.vendor, info.product);
+fn mirror(path: &Path, name: Option<String>) -> Result<()> {
+    let (dev, mut ident) = identity_of(path, &daemon::phys_for("mirror"))?;
+    if let Some(n) = name {
+        ident.name = n;
+    }
+    log::info!("creating uhid clone of {} ({:04x}:{:04x}:{:04x})", ident.name, ident.bus, ident.vendor, ident.product);
     let virt = uhid::Uhid::create(&ident)?;
     let (proxy, handle) = proxy::Proxy::new("mirror".into(), virt)?;
     handle.send(proxy::Ctrl::Attach(dev));

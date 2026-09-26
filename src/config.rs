@@ -1,21 +1,23 @@
 use std::collections::BTreeMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use serde::{Deserialize, Deserializer};
 
+use crate::identity::StoredIdentity;
+
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
-    pub devices: BTreeMap<String, DeviceMatch>,
+    pub devices: BTreeMap<String, DeviceConfig>,
 }
 
-/// Which source hidraw a virtual device tracks. Vendor and product are
-/// required; the rest narrow the match when several devices share an ID
-/// (multiple HID interfaces, or two of the same controller).
+/// One virtual device. Vendor and product are required; the rest narrow the
+/// source match when several devices share an ID (multiple HID interfaces, or
+/// two of the same controller).
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct DeviceMatch {
+pub struct DeviceConfig {
     pub vendor: u16,
     pub product: u16,
     #[serde(default, deserialize_with = "de_bus")]
@@ -23,15 +25,29 @@ pub struct DeviceMatch {
     pub uniq: Option<String>,
     /// Substring of the source's HID phys string, e.g. "input1" to select an interface.
     pub phys: Option<String>,
+    /// Identity to create the virtual device from before the source has ever
+    /// been seen. Takes precedence over the cache.
+    pub identity: Option<StoredIdentity>,
+    /// Same as `identity`, read from a TOML file as written by `inspect --toml`.
+    pub identity_file: Option<PathBuf>,
 }
 
-impl DeviceMatch {
+impl DeviceConfig {
     pub fn matches(&self, bus: u16, vendor: u16, product: u16, uniq: &str, phys: &str) -> bool {
         self.vendor == vendor
             && self.product == product
             && self.bus.is_none_or(|b| b == bus)
             && self.uniq.as_deref().is_none_or(|u| u.eq_ignore_ascii_case(uniq))
             && self.phys.as_deref().is_none_or(|p| phys.contains(p))
+    }
+
+    pub fn configured_identity(&self) -> Result<Option<StoredIdentity>> {
+        if let Some(id) = &self.identity {
+            return Ok(Some(id.clone()));
+        }
+        let Some(p) = &self.identity_file else { return Ok(None) };
+        let text = std::fs::read_to_string(p).with_context(|| format!("read {}", p.display()))?;
+        toml::from_str(&text).map(Some).with_context(|| format!("parse {}", p.display()))
     }
 }
 
@@ -47,17 +63,23 @@ enum BusRepr {
     Name(String),
 }
 
+pub fn bus_from_name(s: &str) -> Option<u16> {
+    Some(match s.to_ascii_lowercase().as_str() {
+        "usb" => 0x03,
+        "bluetooth" => 0x05,
+        "virtual" => 0x06,
+        "i2c" => 0x18,
+        _ => return None,
+    })
+}
+
 fn de_bus<'de, D: Deserializer<'de>>(d: D) -> Result<Option<u16>, D::Error> {
     let v: Option<BusRepr> = Option::deserialize(d)?;
     Ok(match v {
         None => None,
         Some(BusRepr::Num(n)) => Some(n),
-        Some(BusRepr::Name(s)) => Some(match s.to_ascii_lowercase().as_str() {
-            "usb" => 0x03,
-            "bluetooth" => 0x05,
-            "virtual" => 0x06,
-            "i2c" => 0x18,
-            other => return Err(serde::de::Error::custom(format!("unknown bus {other:?}"))),
-        }),
+        Some(BusRepr::Name(s)) => {
+            Some(bus_from_name(&s).ok_or_else(|| serde::de::Error::custom(format!("unknown bus {s:?}")))?)
+        }
     })
 }

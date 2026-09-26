@@ -169,3 +169,22 @@ fn check(ret: libc::c_int) -> io::Result<libc::c_int> {
         Ok(ret)
     }
 }
+
+/// Drops group/other bits and any POSIX ACL on a device node. Works for the
+/// node's owner, which the udev rules make the daemon user. Guards against a
+/// later udev RUN (such as the uaccess builtin) having re-granted access.
+pub fn restrict_node(path: &Path) -> io::Result<()> {
+    let c = std::ffi::CString::new(path.as_os_str().as_encoded_bytes()).map_err(io::Error::other)?;
+    // SAFETY: c is a valid NUL-terminated path.
+    check(unsafe { libc::chmod(c.as_ptr(), 0o600) })?;
+    let key = c"system.posix_acl_access";
+    // SAFETY: both pointers are valid C strings.
+    let r = unsafe { libc::removexattr(c.as_ptr(), key.as_ptr()) };
+    if r < 0 {
+        let e = io::Error::last_os_error();
+        if e.raw_os_error() != Some(libc::ENODATA) {
+            return Err(e);
+        }
+    }
+    Ok(())
+}

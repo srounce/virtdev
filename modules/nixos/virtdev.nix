@@ -4,53 +4,23 @@ let
   cfg = config.services.virtdev;
   fmt = pkgs.formats.toml { };
 
-  busNumber = {
-    usb = 3;
-    bluetooth = 5;
-    virtual = 6;
-    i2c = 24;
-  };
   idType = lib.types.either lib.types.ints.u16 (lib.types.strMatching "[0-9a-fA-F]{1,4}");
   toId = v: if builtins.isString v then lib.fromHexString v else v;
-  hex4 = n: lib.toUpper (lib.fixedWidthString 4 "0" (lib.toHexString (toId n)));
-  busPattern = bus:
-    if bus == null then "*"
-    else hex4 (if builtins.isString bus then busNumber.${bus} else bus);
-
-  # Kernel name of the HID device behind a source: <bus>:<vid>:<pid>.<instance>.
-  kernels = d: "${busPattern d.bus}:${hex4 d.vendor}:${hex4 d.product}.*";
 
   configFile = fmt.generate "virtdev.toml" {
-    devices = lib.mapAttrs (_: d: lib.filterAttrs (_: v: v != null) (d // { vendor = toId d.vendor; product = toId d.product; })) cfg.devices;
+    devices = lib.mapAttrs (_: d:
+      lib.filterAttrs (_: v: v != null) {
+        inherit (d) bus uniq phys identity;
+        vendor = toId d.vendor;
+        product = toId d.product;
+        identity_file = d.identityFile;
+      }) cfg.devices;
   };
 
-  # The proxy device carries the same VID/PID as its source. It is told apart
-  # by the phys string the daemon sets, so the source alone loses its access.
-  # Runs at 99 so it overrides any earlier rule granting access to the source.
-  hideRules = lib.concatStrings (lib.mapAttrsToList (name: d: ''
-    # virtdev: hide source of "${name}"
-    SUBSYSTEM=="hidraw", KERNELS=="${kernels d}", IMPORT{parent}="HID_PHYS"
-    SUBSYSTEM=="hidraw", KERNELS=="${kernels d}", ENV{HID_PHYS}!="virtdev:*", OWNER="${cfg.user}", GROUP="${cfg.group}", MODE="0600"
-    SUBSYSTEM=="input", ATTRS{phys}=="virtdev:*", ENV{VIRTDEV_PROXY}="1"
-    SUBSYSTEM=="input", ENV{VIRTDEV_PROXY}!="1", KERNELS=="${kernels d}", ENV{ID_INPUT}="", ENV{ID_INPUT_JOYSTICK}="", ENV{ID_INPUT_KEYBOARD}="", ENV{ID_INPUT_MOUSE}="", ENV{ID_INPUT_TABLET}="", ENV{ID_INPUT_TOUCHPAD}="", ENV{LIBINPUT_IGNORE_DEVICE}="1", OWNER="${cfg.user}", GROUP="${cfg.group}", MODE="0600"
-  '') cfg.devices);
-
-  # Access grants sit before 73-seat-late.rules so the uaccess tag takes effect.
-  accessRules = ''
-    SUBSYSTEM=="misc", KERNEL=="uhid", OWNER="${cfg.user}", GROUP="${cfg.group}", MODE="0600"
-  '' + lib.optionalString cfg.proxyAccess ''
-    SUBSYSTEM=="hidraw", IMPORT{parent}="HID_PHYS"
-    SUBSYSTEM=="hidraw", ENV{HID_PHYS}=="virtdev:*", TAG+="uaccess"
-  '';
-
-  rulesPackage = pkgs.runCommand "virtdev-udev-rules" {
-    inherit accessRules;
-    hideRules = lib.optionalString cfg.hideSources hideRules;
-    passAsFile = [ "accessRules" "hideRules" ];
-  } ''
-    mkdir -p $out/lib/udev/rules.d
-    cp "$accessRulesPath" $out/lib/udev/rules.d/70-virtdev.rules
-    cp "$hideRulesPath" $out/lib/udev/rules.d/99-virtdev.rules
+  rulesPackage = pkgs.runCommand "virtdev-udev-rules" { } ''
+    ${cfg.package}/bin/virtdev udev-rules ${configFile} $out/lib/udev/rules.d \
+      --user ${cfg.user} --group ${cfg.group} --setfacl ${pkgs.acl}/bin/setfacl
+    ${lib.optionalString (!cfg.hideSources) "rm $out/lib/udev/rules.d/99-virtdev.rules"}
   '';
 
   deviceModule = { ... }: {
@@ -64,7 +34,7 @@ let
         description = "Product ID of the source device, as an integer or hex string.";
       };
       bus = lib.mkOption {
-        type = lib.types.nullOr (lib.types.either (lib.types.enum (lib.attrNames busNumber)) lib.types.ints.u16);
+        type = lib.types.nullOr (lib.types.either (lib.types.enum [ "usb" "bluetooth" "virtual" "i2c" ]) lib.types.ints.u16);
         default = null;
         description = "Restrict to a HID bus type. Null matches any.";
       };
@@ -77,6 +47,16 @@ let
         type = lib.types.nullOr lib.types.str;
         default = null;
         description = "Substring of the source phys string, e.g. \"input1\" to select one HID interface.";
+      };
+      identity = lib.mkOption {
+        type = lib.types.nullOr (lib.types.attrsOf (lib.types.either lib.types.str lib.types.int));
+        default = null;
+        description = "Inline device identity as printed by `virtdev inspect --toml`, so the virtual device exists before the source has ever connected.";
+      };
+      identityFile = lib.mkOption {
+        type = lib.types.nullOr lib.types.path;
+        default = null;
+        description = "Path to a TOML identity file as written by `virtdev inspect --toml`.";
       };
     };
   };
@@ -97,28 +77,25 @@ in
       description = "Virtual devices to keep alive, keyed by a short name.";
       example = lib.literalExpression ''
         {
-          gt3wls = { vendor = "5411"; product = "6969"; bus = "bluetooth"; };
+          gt3wls = {
+            vendor = "5411"; product = "6969"; bus = "bluetooth";
+            identityFile = ./gt3wls.toml;
+          };
         }
       '';
-    };
-
-    proxyAccess = lib.mkOption {
-      type = lib.types.bool;
-      default = true;
-      description = "Tag the proxy hidraw nodes with uaccess so the logged-in user can open them.";
     };
 
     hideSources = lib.mkOption {
       type = lib.types.bool;
       default = true;
-      description = "Install udev rules so only the daemon can open the source devices.";
+      description = "Install the generated 99-virtdev.rules so only the daemon can open the source devices.";
     };
 
     udevRules = lib.mkOption {
       type = lib.types.package;
       readOnly = true;
       default = rulesPackage;
-      description = "Generated udev rules package.";
+      description = "Rules package produced by `virtdev udev-rules`.";
     };
 
     configFile = lib.mkOption {
@@ -169,7 +146,7 @@ in
         RestartSec = 2;
 
         DevicePolicy = "closed";
-        DeviceAllow = [ "/dev/uhid rw" "char-hidraw rw" ];
+        DeviceAllow = [ "/dev/uhid rw" "char-hidraw rw" "char-input rw" ];
         RestrictAddressFamilies = [ "AF_NETLINK" "AF_UNIX" ];
         NoNewPrivileges = true;
         ProtectSystem = "strict";

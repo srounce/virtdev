@@ -10,13 +10,15 @@ use anyhow::{Context, Result};
 use log::{error, info, warn};
 
 use crate::cache;
-use crate::config::{Config, DeviceMatch};
-use crate::hidraw::Hidraw;
+use crate::config::{Config, DeviceConfig};
+use crate::hidraw::{self, Hidraw};
 use crate::proxy::{Ctrl, Handle, Proxy};
 use crate::uhid::{Identity, Uhid};
 
 struct Managed {
-    matcher: DeviceMatch,
+    cfg: DeviceConfig,
+    /// Identity fixed by the config; the live device may not replace it.
+    pinned: bool,
     handle: Option<Handle>,
     /// devnode of the currently attached source, used to recognise its removal.
     source: Option<PathBuf>,
@@ -28,15 +30,28 @@ pub fn phys_for(name: &str) -> String {
 
 pub fn run(config: Config, cache_dir: &Path) -> Result<()> {
     let mut managed: BTreeMap<String, Managed> = BTreeMap::new();
-    for (name, matcher) in config.devices {
-        let mut m = Managed { matcher, handle: None, source: None };
-        match cache::load(cache_dir, &name, &phys_for(&name)) {
-            Ok(Some(ident)) => {
-                info!("{name}: creating virtual device from cache ({})", ident.name);
-                m.handle = Some(spawn_proxy(&name, &ident)?);
+    for (name, cfg) in config.devices {
+        let mut m = Managed { cfg, pinned: false, handle: None, source: None };
+        let phys = phys_for(&name);
+        let ident = match m.cfg.configured_identity()? {
+            Some(s) => {
+                m.pinned = true;
+                Some(s.to_identity(&phys).with_context(|| format!("{name}: identity"))?)
             }
-            Ok(None) => info!("{name}: no cache, waiting for source"),
-            Err(e) => warn!("{name}: ignoring bad cache: {e:#}"),
+            None => match cache::load(cache_dir, &name, &phys) {
+                Ok(id) => id,
+                Err(e) => {
+                    warn!("{name}: ignoring bad cache: {e:#}");
+                    None
+                }
+            },
+        };
+        match ident {
+            Some(id) => {
+                info!("{name}: creating virtual device ({})", id.name);
+                m.handle = Some(spawn_proxy(&name, &id)?);
+            }
+            None => info!("{name}: no identity known, waiting for source"),
         }
         managed.insert(name, m);
     }
@@ -72,18 +87,20 @@ pub fn run(config: Config, cache_dir: &Path) -> Result<()> {
     }
 }
 
-struct SourceInfo {
-    bus: u16,
-    vendor: u16,
-    product: u16,
-    uniq: String,
-    phys: String,
-    version: u32,
+pub struct SourceInfo {
+    pub bus: u16,
+    pub vendor: u16,
+    pub product: u16,
+    pub uniq: String,
+    pub phys: String,
+    pub version: u32,
+    /// evdev and js nodes of the same HID device, hidden alongside the hidraw node.
+    pub input_nodes: Vec<PathBuf>,
 }
 
 /// Reads identity from udev properties so that no hidraw node has to be
 /// opened until it is known to be one we want.
-fn source_info(dev: &udev::Device) -> Option<SourceInfo> {
+pub fn source_info(dev: &udev::Device) -> Option<SourceInfo> {
     let hid = dev.parent_with_subsystem("hid").ok().flatten()?;
     let prop = |k: &str| hid.property_value(k).map(|v| v.to_string_lossy().into_owned()).unwrap_or_default();
     let id = prop("HID_ID");
@@ -92,17 +109,21 @@ fn source_info(dev: &udev::Device) -> Option<SourceInfo> {
 
     // The HID core does not expose the device version, but its input child does.
     let mut version = 0;
+    let mut input_nodes = Vec::new();
     if let Ok(mut en) = udev::Enumerator::new() {
         let _ = en.match_subsystem("input");
         let _ = en.match_parent(&hid);
         if let Ok(devs) = en.scan_devices() {
             for d in devs {
-                if let Some(p) = d.property_value("PRODUCT") {
-                    if let Some(v) = p.to_string_lossy().split('/').nth(3) {
-                        if let Ok(v) = u32::from_str_radix(v, 16) {
-                            version = v;
-                            break;
-                        }
+                if let Some(n) = d.devnode() {
+                    input_nodes.push(n.to_path_buf());
+                }
+                if version == 0 {
+                    if let Some(v) = d
+                        .property_value("PRODUCT")
+                        .and_then(|p| p.to_string_lossy().split('/').nth(3).and_then(|v| u32::from_str_radix(v, 16).ok()))
+                    {
+                        version = v;
                     }
                 }
             }
@@ -116,7 +137,16 @@ fn source_info(dev: &udev::Device) -> Option<SourceInfo> {
         uniq: prop("HID_UNIQ"),
         phys: prop("HID_PHYS"),
         version,
+        input_nodes,
     })
+}
+
+/// udev view of a hidraw node given its path.
+pub fn source_info_for(node: &Path) -> Result<SourceInfo> {
+    let meta = std::fs::metadata(node)?;
+    let dev = udev::Device::from_devnum(udev::DeviceType::Character, std::os::unix::fs::MetadataExt::rdev(&meta))
+        .with_context(|| format!("udev lookup of {}", node.display()))?;
+    source_info(&dev).context("not a HID device")
 }
 
 fn on_add(dev: &udev::Device, managed: &mut BTreeMap<String, Managed>, cache_dir: &Path) {
@@ -126,7 +156,7 @@ fn on_add(dev: &udev::Device, managed: &mut BTreeMap<String, Managed>, cache_dir
         return;
     }
     for (name, m) in managed.iter_mut() {
-        if m.source.is_some() || !m.matcher.matches(si.bus, si.vendor, si.product, &si.uniq, &si.phys) {
+        if m.source.is_some() || !m.cfg.matches(si.bus, si.vendor, si.product, &si.uniq, &si.phys) {
             continue;
         }
         if let Err(e) = attach(name, m, &node, &si, cache_dir) {
@@ -138,6 +168,11 @@ fn on_add(dev: &udev::Device, managed: &mut BTreeMap<String, Managed>, cache_dir
 
 fn attach(name: &str, m: &mut Managed, node: &Path, si: &SourceInfo, cache_dir: &Path) -> Result<()> {
     let src = Hidraw::open(node)?;
+    for n in std::iter::once(node.to_path_buf()).chain(si.input_nodes.iter().cloned()) {
+        if let Err(e) = hidraw::restrict_node(&n) {
+            warn!("{name}: could not restrict {}: {e}", n.display());
+        }
+    }
     let info = src.info()?;
     let ident = Identity {
         name: info.name.clone(),
@@ -151,15 +186,20 @@ fn attach(name: &str, m: &mut Managed, node: &Path, si: &SourceInfo, cache_dir: 
         descriptor: info.descriptor.clone(),
     };
 
-    let stale = match cache::load(cache_dir, name, &ident.phys)? {
-        Some(c) => c.descriptor != ident.descriptor || c.bus != ident.bus || c.uniq != ident.uniq,
-        None => true,
-    };
-    if stale {
-        cache::save(cache_dir, name, &ident)?;
-        if m.handle.is_some() {
-            warn!("{name}: source identity changed, recreating virtual device");
+    if m.pinned {
+        let cfg_id = m.cfg.configured_identity()?.unwrap().to_identity(&ident.phys)?;
+        if cfg_id.descriptor != ident.descriptor {
+            warn!("{name}: live report descriptor differs from the configured identity; reports may be misinterpreted");
+        }
+    } else {
+        let stale = match cache::load(cache_dir, name, &ident.phys)? {
+            Some(c) => c.descriptor != ident.descriptor || c.bus != ident.bus || c.uniq != ident.uniq,
+            None => true,
+        };
+        if stale {
+            cache::save(cache_dir, name, &ident)?;
             if let Some(h) = m.handle.take() {
+                warn!("{name}: source identity changed, recreating virtual device");
                 h.send(Ctrl::Shutdown);
             }
         }
