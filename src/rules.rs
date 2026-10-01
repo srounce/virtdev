@@ -12,16 +12,19 @@ pub struct Options<'a> {
     pub setfacl: &'a str,
 }
 
-/// Grants the daemon /dev/uhid, gives the logged-in user the proxy nodes, and
-/// names them under /dev/input/by-id. The standard by-id rules skip uhid
-/// devices because they have no USB parent to derive a serial from.
+/// Grants the daemon /dev/uhid by group so root stays owner: bluetoothd and
+/// other uhid users often run as root with a capability set lacking
+/// CAP_DAC_OVERRIDE, and an owner-only node would lock them out. Gives the
+/// logged-in user the proxy nodes and names them under /dev/input/by-id. The
+/// standard by-id rules skip uhid devices because they have no USB parent to
+/// derive a serial from.
 pub fn access(cfg: &Config, o: &Options) -> String {
     let mut out = format!(
-        "SUBSYSTEM==\"misc\", KERNEL==\"uhid\", OWNER=\"{}\", GROUP=\"{}\", MODE=\"0600\"\n\
+        "SUBSYSTEM==\"misc\", KERNEL==\"uhid\", GROUP=\"{}\", MODE=\"0660\"\n\
          SUBSYSTEM==\"hidraw\", IMPORT{{parent}}=\"HID_PHYS\"\n\
          SUBSYSTEM==\"hidraw\", ENV{{HID_PHYS}}==\"virtdev:*\", TAG+=\"uaccess\"\n\
          SUBSYSTEM==\"input\", ATTRS{{phys}}==\"virtdev:*\", TAG+=\"uaccess\"\n",
-        o.user, o.group
+        o.group
     );
     for name in cfg.devices.keys() {
         let _ = writeln!(out, "# virtdev: by-id links for \"{name}\"");
